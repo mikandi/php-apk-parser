@@ -5,14 +5,12 @@ It can open an APK file and extract the contained manifest file to parse it and 
 The class can also extract the whole files contained in the APK file to a given directory.
 
 
-
 ## PHPClasses.org
 ----------
 [Phpclasses.org Repo](http://www.phpclasses.org/apk-parser)
 
-Manuel Lemos Comment:
-----------
-"Useful solution to inspect Android application package files to extract its contents and the information of what the application does."
+MiKandi Comments
+----------------
 
-
+This version modifies the file layout and names of the original project to be PSR-0 compliant (since we use both Symfony and another PSR-0 compliant framework). It was modified to fix the issue relating to [Unrecognized tag code 0x00100104](https://github.com/tufanbarisyildirim/php-apk-parser/issues/8)
 
