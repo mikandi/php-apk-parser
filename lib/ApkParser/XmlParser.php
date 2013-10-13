@@ -6,6 +6,7 @@ class XmlParser  {
 	const END_DOC_TAG    = 0x00100101;
 	const START_TAG      = 0x00100102;
 	const END_TAG        = 0x00100103;
+	const TEXT_TAG       = 0x00100104;
 
 	private $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n";
 	private $bytes = array();
@@ -64,8 +65,10 @@ class XmlParser  {
 					$off           += 9*4;
 					$tagName       = $this->compXmlString($this->bytes, $sitOff, $stOff, $nameSi);
 					$startTagLineNo = $lineNo;
-					$attr_string    = ""; 
+					$attr_string    = "";
+					//\D::L("START_TAG", $tagName);
 
+					$foundAttrNames = array();
 					for ($ii=0; $ii < $numbAttrs; $ii++) {
 						$attrNameNsSi   = $this->littleEndianWord($this->bytes, $off);  
 						$attrNameSi     = $this->littleEndianWord($this->bytes, $off + 1*4);
@@ -80,7 +83,11 @@ class XmlParser  {
 						else
 							$attrValue  = "0x" . dechex($attrResId);
 
+						if (in_array($attrName, $foundAttrNames)) {
+							$attrName .= "-$ii";
+						}
 						$attr_string .= " " . $attrName . "=\"" . $attrValue . "\"";
+						array_push($foundAttrNames, $attrName);
 					}
 					$this->appendXmlIndent($indentCount, "<". $tagName . $attr_string . ">");
 					$indentCount++;
@@ -92,6 +99,7 @@ class XmlParser  {
 					$indentCount--;
 					$off += 6*4;
 					$tagName = $this->compXmlString($this->bytes, $sitOff, $stOff, $nameSi);
+					//\D::L("END_TAG", $tagName);
 					$this->appendXmlIndent($indentCount, "</" . $tagName . ">");
 				}
 				break;
@@ -101,13 +109,49 @@ class XmlParser  {
 					$this->ready = true; 
 					break 2;
 				}
-				break; 
+				break;
+
+				case self::TEXT_TAG:
+				{
+					// The text tag appears to be used when Android references an id value that is not
+					// a string literal
+					// To skip it, read forward until finding the sentinal 0x00000000 after finding
+					// the sentinal 0xffffffff
+					//\D::I("TEXT_TAG", "Found at ".$off);
+					//\D::L("Current XML", self::cleanXml($this->xml));
+					$sentinal = "0xffffffff";
+					while ($off < count($this->bytes)) {
+						$curr = "0x".str_pad(dechex($this->littleEndianWord($this->bytes, $off)), 8, "0", STR_PAD_LEFT);;
+						//\D::L("TEXT_TAG->SkipText", "$off: $curr");
+						$off += 4;
+						if ($off > count($this->bytes)) {
+							throw new \Exception("Sentinal not found before end of file");
+						}
+						if ($curr == $sentinal && $sentinal == "0xffffffff") {
+							//\D::I("TEXT_TAG->SkipText", "Found $sentinal");
+							$sentinal = "0x00000000";
+						} else if ($curr == $sentinal) {
+							//\D::I("TEXT_TAG->SkipText", "Found $sentinal");
+							break;
+						}
+					}
+					//$noff = $off;
+					//while($noff < count($this->bytes)) {
+					//	\D::L("Remaining", "0x".str_pad(dechex($this->littleEndianWord($this->bytes, $noff)), 8, "0", STR_PAD_LEFT));
+					//	$noff += 4;
+					//}
+				}
+				break;
+
 
 				default:
 					throw new \Exception("Unrecognized tag code '"  . dechex($currentTag) . "' at offset " . $off);
 					break;
 			}
-		}  
+		}
+		if (!$this->ready) {
+			throw new \Exception("END_TAG not found in AXML");
+		}
 	}
 
 	public function compXmlString($xml, $sitOff, $stOff, $str_index) {
@@ -151,9 +195,17 @@ class XmlParser  {
 	}
 
 	public function getXmlObject($className = '\SimpleXmlElement') {
-		if($this->xmlObject === NULL || !$this->xmlObject instanceof $className)
-			$this->xmlObject = simplexml_load_string($this->getXmlString(),$className);
+		if($this->xmlObject === NULL || !$this->xmlObject instanceof $className) {
+			\D::L(__FUNCTION__, self::cleanXml($this->getXMLString()));
+			$this->xmlObject = simplexml_load_string(self::cleanXml($this->getXmlString()),$className);
+		}
 
 		return $this->xmlObject;       
+	}
+
+	private static function cleanXml($string) {
+		$ret = utf8_encode($string);
+		$ret = str_replace("&", "&amp;", $ret);
+		return $ret;
 	}
 }
